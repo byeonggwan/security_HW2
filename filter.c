@@ -153,6 +153,10 @@ void filter_sepia(struct image *img, void *depth_arg) {
   for (long i = 0; i < img->size_y; i++) {
     for (long j = 0; j < img->size_x; j++) {
       /* TODO: Implement */
+      int rgb_average = (image_data[i][j].red + image_data[i][j].green + image_data[i][j].blue) / 3;
+      image_data[i][j].red = rgb_average + 2*depth > 255 ? 255 : rgb_average + 2*depth;
+      image_data[i][j].green = rgb_average + depth > 255 ? 255 : rgb_average + depth;
+      image_data[i][j].blue = rgb_average;
     }
   }
 }
@@ -169,6 +173,12 @@ void filter_bw(struct image *img, void *threshold_arg) {
   for (long i = 0; i < img->size_y; i++) {
     for (long j = 0; j < img->size_x; j++) {
       /* TODO: Implement */
+      int rgb_average = (image_data[i][j].red + image_data[i][j].green + image_data[i][j].blue) / 3;
+      // if average exceeds the threshold, bw = 255. otherwise, bw = 0
+      uint8_t bw = rgb_average > threshold ? 255 : 0;
+      image_data[i][j].red = bw;
+      image_data[i][j].green = bw;
+      image_data[i][j].blue = bw;
     }
   }
 }
@@ -204,6 +214,36 @@ void filter_edge_detect(struct image *img, void *threshold_arg) {
   for (long i = 0; i < img->size_y; i++) {
     for (long j = 0; j < img->size_x; j++) {
       /* TODO: Implement */
+      double G;
+      double G_red, G_green, G_blue;
+      double G_x_red = 0, G_y_red = 0, G_x_green = 0, G_y_green = 0, G_x_blue = 0, G_y_blue = 0;
+      // Compute gradient
+      for (long k = 0; k < 3; k++) {
+        for (long l = 0; l < 3; l++) {
+          long temp_i = i + k - 1;
+          long temp_j = j + l - 1;
+          if (temp_i < 0 || temp_j < 0 || temp_i >= img->size_y || temp_j >= img->size_x)
+            continue;
+          else {
+            G_x_red += image_data[temp_i][temp_j].red * weights_x[k][l];
+            G_y_red += image_data[temp_i][temp_j].red * weights_y[k][l];
+            G_x_green += image_data[temp_i][temp_j].green * weights_x[k][l];
+            G_y_green += image_data[temp_i][temp_j].green * weights_y[k][l];
+            G_x_blue += image_data[temp_i][temp_j].blue * weights_x[k][l];
+            G_y_blue += image_data[temp_i][temp_j].blue * weights_y[k][l];
+          }
+        }
+      }
+      G_red = sqrt(G_x_red*G_x_red + G_y_red*G_y_red);
+      G_green = sqrt(G_x_green*G_x_green + G_y_green*G_y_green);
+      G_blue = sqrt(G_x_blue*G_x_blue + G_y_blue*G_y_blue);
+      G = sqrt(G_red*G_red + G_green*G_green + G_blue*G_blue);
+
+      // if G exceeds threshold, black. Or not, white
+      uint8_t bw = G > (double)threshold ? 0 : 255;
+      image_data[i][j].red = bw;
+      image_data[i][j].green = bw;
+      image_data[i][j].blue = bw;
     }
   }
 }
@@ -219,6 +259,9 @@ void filter_keying(struct image *img, void *key_color) {
   for (long i = 0; i < img->size_y; i++) {
     for (long j = 0; j < img->size_x; j++) {
       /* TODO: Implement */
+      struct pixel temp_px = image_data[i][j];
+      if(temp_px.red == key.red && temp_px.green == key.green && temp_px.blue == key.blue)
+        image_data[i][j].alpha = 0;
     }
   }
 }
