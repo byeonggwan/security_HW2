@@ -467,6 +467,35 @@ char *grayscale_output[] = {
 START_TEST(grayscale_examples) {
   double weights[] = {0.2125, 0.7154, 0.0721};
   /* TODO: Implement */
+  // Check whether the image is well filtered or not.
+  // 1 means it is well filtered, 0 means it is not.
+  int check = 1;
+  struct image *img, *img_output;
+
+  // Load both example and correct images.
+  ck_assert_int_eq(load_png(grayscale_sources[_i], &img), 0);
+  ck_assert_int_eq(load_png(grayscale_output[_i], &img_output), 0);
+
+  filter_grayscale(img, weights);
+
+  // Check whether filtered img and img_output are same or not.
+  ck_assert_uint_eq(img->size_x, img_output->size_x);
+  ck_assert_uint_eq(img->size_y, img_output->size_y);
+  for(long j = 0; j < img->size_x * img->size_y; j++) {
+    if(img->px[j].red != img_output->px[j].red)
+      check = 0;
+    if(img->px[j].green != img_output->px[j].green)
+      check = 0;
+    if(img->px[j].blue != img_output->px[j].blue)
+      check = 0;
+    if(img->px[j].alpha != img_output->px[j].alpha)
+      check = 0;
+  }
+  ck_assert_int_eq(check, 1);
+  free(img_output->px);
+  free(img->px);
+  free(img_output);
+  free(img);
 }
 END_TEST
 
@@ -475,12 +504,57 @@ END_TEST
  * The alpha channel needs to be intact in both cases */
 START_TEST(negative_functionality) {
   /* TODO: Implement */
+  srand(time(NULL) ^ getpid());
+
+  struct image img;
+  int noarg = 0;
+  img.size_x = rand() % 511 + 1; // in range [1, 511]
+  img.size_y = rand() % 511 + 1;
+  
+  img.px = malloc(img.size_x * img.size_y * sizeof(struct pixel));
+  if(img.px == NULL)
+    assert(0 && "Rerun test, malloc failed");
+  // Make black image.
+  for(long i = 0; i < img.size_y * img.size_x; i++) {
+    img.px[i].red = 0;
+    img.px[i].green = 0;
+    img.px[i].blue = 0;
+    img.px[i].alpha = 128;
+  }
+
+  filter_negative(&img, &noarg);
+
+  // Used to check whether black or white pixel is changed to opposite color or not.
+  // 1 means changed, 0 means not changed so there is something wrong.
+  int color_check = 1;
+  for(long i = 0; i < img.size_y * img.size_x; i++) {
+    if((img.px[i].red != 255) || (img.px[i].green != 255) || (img.px[i].blue != 255) || (img.px[i].alpha != 128)) {
+      color_check = 0;
+    }
+  }
+  ck_assert_int_eq(color_check, 1);
+
+  color_check = 1;
+  filter_negative(&img, &noarg);
+  for(long i = 0; i < img.size_y * img.size_x; i++) {
+    if((img.px[i].red != 0) || (img.px[i].green != 0) || (img.px[i].blue != 0) || (img.px[i].alpha != 128)) {
+      color_check = 0;
+    }
+  }
+  ck_assert_int_eq(color_check, 1);
 }
 END_TEST
 
 /* Check if the filter doesn't crash when we pass a 0x0 image */
 START_TEST(negative_zero_size) {
   /* TODO: Implement */
+  struct image img;
+  uint8_t noarg = 0;
+
+  img.size_x = img.size_y = 0;
+  img.px = NULL;
+  
+  filter_negative(&img, &noarg);
 }
 END_TEST
 
@@ -491,8 +565,54 @@ START_TEST(blur_functionality) {
   struct pixel white = {252, 252, 252, 255};
   struct pixel px[3][3] = {{black, black, black}, {black, white, black}, {black, black, black}};
   struct image img = {3, 3, &px};
-
+  
   /* TODO: Implement */
+  int r;
+  // Used when r is 1, 2 or 3.
+  struct pixel dark0 = {28, 28, 28, 255};
+  struct pixel dark1 = {42, 42, 42, 255};
+  struct pixel dark2 = {63, 63, 63, 255};
+
+  for(r = 0; r < 4; r++){
+    // Used to check whether pixels are changed the right way or not.
+    // 1 means correctly changed, 0 means not changed so there is something wrong.
+    int color_check = 1;
+    // dup_img is duplicated image.
+    // comp_img is a correct image for comparison.
+    struct image dup_img, comp_img;
+
+    dup_img = duplicate_img(img);
+    filter_blur(&dup_img, &r);
+
+    // Make a correct image for comparison by r.
+    switch(r){
+      case 0:
+        comp_img = duplicate_img(img);
+        break;
+      case 1:
+        {struct pixel temp_px[3][3] = {{dark2, dark1, dark2}, {dark1, dark0, dark1}, {dark2, dark1, dark2}};
+        struct image temp_img = {3, 3, &temp_px};
+        comp_img = duplicate_img(temp_img);
+        break;}
+      case 2:
+      case 3:
+        {struct pixel temp_px[3][3] = {{dark0, dark0, dark0}, {dark0, dark0, dark0}, {dark0, dark0, dark0}};
+        struct image temp_img = {3, 3, &temp_px};
+        comp_img = duplicate_img(temp_img);
+        break;}
+      default:
+        assert(0 && "initializing img error : range of radius is wrong");
+    }
+
+    // Check whether the image is correctly blurred or not.
+    for(long i = 0; i < img.size_y * img.size_x; i++) {
+      if((comp_img.px[i].red != dup_img.px[i].red) || (comp_img.px[i].green != dup_img.px[i].green) || (comp_img.px[i].blue != dup_img.px[i].blue)) {
+        color_check = 0;
+      }
+    }
+
+    ck_assert_int_eq(color_check, 1);
+  }
 }
 END_TEST
 
@@ -501,19 +621,66 @@ END_TEST
  * all of the previous values +- 1) */
 START_TEST(blur_radius_edge_cases) {
   /* TODO: Implement */
+  srand(time(NULL) ^ getpid());
+
+  struct image img = generate_rand_img();
+  int image_width = (int)img.size_x;
+  int image_height = (int)img.size_y;
+  int radii[5] = {INT_MIN, INT_MAX, 0, image_width, image_height};
+
+  // Check all of 5*4 cases.
+  for (int i=0; i<5; i++) {
+    for (int j=0; j<4; j++) {
+      int r = radii[i];
+      struct image temp_img = duplicate_img(img);
+      switch(j) {
+        case 0:
+          break;
+        case 1:
+          r %= 2;
+          break;
+        case 2:
+          r += 1;
+          break;
+        case 3:
+          r -= 1;
+          break;
+        default:
+          break;
+      }
+
+      filter_blur(&temp_img, &r);
+    }
+  }
 }
 END_TEST
 
 /* Verify for a random image that the transparency filter works properly */
 START_TEST(transparency_functionality) {
   /* TODO: Implement */
+  srand(time(NULL) ^ getpid());
+
+  // Used to check whether pixels are changed the right way or not.
+  // 1 means correctly changed, 0 means not changed so there is something wrong.
+  int check = 1;
+  struct image img = generate_rand_img();
+  uint8_t trans = rand();
+  filter_transparency(&img, &trans);
+  
+  for(long i = 0; i < img.size_y * img.size_x; i++) {
+    if(img.px[i].alpha != trans){
+      check = 0;
+    }
+  }
+
+  ck_assert_int_eq(check, 1);
 }
 END_TEST
 
 /* Check if the function crashes when we pass nullptr as the argument */
 START_TEST(transparency_edge_case) {
   /* TODO: Implement */
-
+  filter_transparency(NULL, NULL);
 }
 END_TEST
 
@@ -542,6 +709,7 @@ int main() {
   /* Tests for functionality */
   tcase_add_test(tc2, grayscale_functionality);
   /* TODO: Add looped test case for grayscale_examples */
+  tcase_add_loop_test(tc2, grayscale_examples, 0, sizeof(grayscale_sources) / sizeof(grayscale_sources[0]));
   tcase_add_test(tc2, negative_functionality);
   tcase_add_test(tc2, blur_functionality);
   tcase_add_test(tc2, transparency_functionality);
